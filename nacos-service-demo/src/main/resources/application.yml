@@ -1,0 +1,6 @@
+server:
+  port: 8889
+  http2:
+    enabled: true
+  ssl:
+    enabled: false
