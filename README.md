@@ -1,15 +1,52 @@
 # Error every three requests with h2c：CloseNowException This stream is not writable Every
 
 **Environment desc**
+
 api gateway (spring cloud gateway) invoke http service(tomcat)
 
 * api gateway: spring cloud gateway 3.1.1, springboot2.7, java11
 * http service: springboot2.7, tomcat embed 9.0.63, java11
 
+**gateway main configuration:**
+
+```
+server:
+  port: 8888
+  http2:
+    enabled: true
+  ssl:
+    enabled: false
+    
+@Configuration
+public class NettyConfiguration {
+
+    // https://projectreactor.io/docs/netty/release/reference/index.html#_http2
+    @Bean
+    public NettyWebServerFactoryCustomizer h2cServerCustomizer(Environment environment, ServerProperties serverProperties) {
+        return new NettyWebServerFactoryCustomizer(environment, serverProperties) {
+            @Override
+            public void customize(NettyReactiveWebServerFactory factory) {
+                factory.addServerCustomizers(httpServer -> httpServer.protocol(HttpProtocol.HTTP11, HttpProtocol.H2C));
+                super.customize(factory);
+            }
+        };
+    }
+
+
+    @Bean
+    public HttpClientCustomizer h2ClientCustomizer() {
+        return httpClient -> httpClient.protocol(HttpProtocol.HTTP11, HttpProtocol.H2C);
+    }
+}
+```
+
 **Describe the bug**
 
 
-tomcat side trace:
+When I send three requests to the gateway, an exception will appear, bug GET request is ok；As long as the Tomcat or the H2C of the gateway is closed, there will be no error
+
+
+http service(tomcat) side trace:
 ```
 2022-06-10 17:51:12.679  WARN 5312 --- [nio-8889-exec-7] .w.s.m.s.DefaultHandlerExceptionResolver : Resolved [org.springframework.http.converter.HttpMessageNotReadableException: I/O error while reading input message; nested exception is org.apache.catalina.connector.ClientAbortException: java.nio.channels.ClosedChannelException]
 2022-06-10 17:51:12.718 ERROR 5312 --- [nio-8889-exec-7] o.a.c.c.C.[Tomcat].[localhost]           : Exception Processing ErrorPage[errorCode=0, location=/error]
@@ -86,7 +123,7 @@ Caused by: org.apache.coyote.http2.StreamException: Connection [0], Stream [5], 
 
 ```
 
-spring cloud side trace:
+spring cloud gateway side trace:
 
 ```
 2022-06-10 17:51:12.679  WARN 5317 --- [ctor-http-nio-2] r.netty.http.client.HttpClientConnect    : [f60a041a/3-1, L:0.0.0.0/0.0.0.0:51495] The connection observed an error
@@ -106,6 +143,6 @@ Original Stack Trace:
 ```
 
 **Sample**
-If possible, please provide a test case or sample application that reproduces
-the problem. This makes it much easier for us to diagnose the problem and to verify that
-we have fixed it.
+
+sample application: https://github.com/yugj/gateway-h2c-issue
+
